@@ -539,6 +539,7 @@ static int get_pcm_device_number(void *proxy, void *proxy_stream)
  */
 static void disable_erap_in(void *proxy)
 {
+#if 0
     struct audio_proxy *aproxy = proxy;
     char pcm_path[MAX_PCM_PATH_LEN];
 
@@ -557,10 +558,12 @@ static void disable_erap_in(void *proxy)
     }
 
     return ;
+#endif
 }
 
 static void enable_erap_in(void *proxy, device_type target_device)
 {
+#if 0
     struct audio_proxy *aproxy = proxy;
     struct pcm_config pcmconfig = pcm_config_erap_in;
     char pcm_path[MAX_PCM_PATH_LEN];
@@ -620,6 +623,7 @@ static void enable_erap_in(void *proxy, device_type target_device)
 err_open:
     disable_erap_in(proxy);
     return ;
+#endif
 }
 
 static void disable_usb_out_loopback(void *proxy)
