@@ -14,10 +14,10 @@
 # limitations under the License.
 #
 
-COMMON_PATH := device/samsung/gta4xls-common
+COMMON_PATH := device/samsung/a53x-common
 
 # Get non-open-source specific aspects
-$(call inherit-product, vendor/samsung/gta4xls-common/gta4xls-common-vendor.mk)
+$(call inherit-product, vendor/samsung/a53x-common/gta4xls-common-vendor.mk)
 
 PRODUCT_CHARACTERISTICS := tablet
 

@@ -1,4 +1,4 @@
-libGLES_mali.so
+libDualCamBokehCapture.camera.samsung.so
+libLocalTM_wrapper.camera.samsung.so
 libOpenCL.so
-libOpenCL.so.1
-libOpenCL.so.1.1
+libeden_rt.so

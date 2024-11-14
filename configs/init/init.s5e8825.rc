@@ -2,6 +2,7 @@ on early-init
     mkdir /mnt/vendor/efs 0771 radio system
     mkdir /mnt/vendor/cpefs 0771 radio system
     mkdir /mnt/vendor/persist 0771 system system
+    mount debugfs /sys/kernel/debug /sys/kernel/debug
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules input_booster_lkm.ko
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules sec_debug_coredump.ko
     # Property used by vintf for sku specific manifests
@@ -11,12 +12,23 @@ on early-init
     exec u:r:vendor_modprobe:s0 -- /vendor/bin/modprobe -a -d /vendor/lib/modules mz_tee_driver.ko
 
 on init
+    # See storage config details at http://source.android.com/tech/storage/
+    mkdir /storage/sdcard 0000 root root
+    mkdir /storage/usb1 0000 root root
+    mkdir /storage/usb2 0000 root root
+    mkdir /mnt/media_rw/sdcard 0700 media_rw media_rw
+    mkdir /mnt/media_rw/usb1 0700 media_rw media_rw
+    mkdir /mnt/media_rw/usb2 0700 media_rw media_rw
+
+    export SECONDARY_STORAGE /storage/sdcard:/storage/usb1:/storage/usb2
+
+    # Support legacy paths
+    symlink /storage/sdcard /mnt/ext_sd
+    symlink /data/app /factory
+
     symlink /dev/block/by-name/steady /dev/block/steady
     symlink /dev/block/by-name/persistent /dev/block/persistent
     symlink /dev/block/by-name/param /dev/block/param
-
-    chown root system /sys/class/sec/gpio/check_requested_gpio
-    chmod 0664 /sys/class/sec/gpio/check_requested_gpio
 
     # GFX
     chown system system /sys/kernel/asv/power_model_0
@@ -96,8 +108,9 @@ on init
     chown system system /dev/cpuset/sf/cgroup.procs
     chown system system /dev/cpuset/sf/cpus
 
-    chown root root /dev/cpuset/sf/cpus
-    write /dev/cpuset/sf/cpus 0-5
+    chmod 0664 /dev/cpuset/sf/cpus
+    chown system system /dev/cpuset/sf/cpus
+    write /dev/cpuset/sf/cpus 0-7
 
     chown system system /dev/cpuset/tasks
     chown system system /dev/cpuset/cgroup.procs
@@ -127,7 +140,7 @@ on init
     chown system system /dev/cpuset/foreground-boost/tasks
     chown system system /dev/cpuset/foreground-boost/cgroup.procs
     chmod 0664 /dev/cpuset/foreground-boost/tasks
-    chmod 0664 /dev/cpuset/foreground-boost/cgroup.procs
+    chmod 0664 /dev/cpuset/foreground-boost/cgroup.procs    
 
     chown system system /dev/cpuset/foreground/cpus
     chown system system /dev/cpuset/foreground-boost/cpus
@@ -137,13 +150,22 @@ on init
     copy /dev/cpuset/mems /dev/cpuset/foreground-boost/mems
     write /dev/cpuset/foreground-boost/cpus 0-7
 
+# set property to boost-optimize
+    setprop sys.perf.boostopt true
+
     # EPIC interfaces
+    chmod 660 /dev/stune/top-app/schedtune.boost
     chown system system /dev/mode
     chown system system /dev/exynos-migov
     chown system system /sys/devices/platform/exynos-migov/control/control_profile
     chown system system /sys/devices/platform/exynos-migov/control/set_margin
     chown system system /sys/devices/platform/exynos-migov/control/fragutil_thr
     chown system system /sys/devices/platform/exynos-migov/migov/running
+    chown system system /dev/cpu_dma_latency
+    chown system system /dev/cluster0_freq_min
+    chown system system /dev/cluster1_freq_min
+    chown system system /dev/cluster0_freq_max
+    chown system system /dev/cluster1_freq_max
     chown system system /dev/cpu_online_min
     chown system system /dev/cpu_online_max
     chown system system /dev/bus_throughput
@@ -157,20 +179,6 @@ on init
     chown system system /dev/device_throughput
     chown system system /dev/device_throughput_max
 
-    # Power HAL
-    chown system system /dev/cluster0_freq_min
-    chown system system /dev/cluster0_freq_max
-    chown system system /dev/cluster1_freq_min
-    chown system system /dev/cluster1_freq_max
-    chown system system /dev/cpu_dma_latency
-    chmod 0664 /dev/cluster0_freq_min
-    chmod 0664 /dev/cluster0_freq_max
-    chmod 0664 /dev/cluster1_freq_min
-    chmod 0664 /dev/cluster1_freq_max
-    chmod 0664 /dev/cpu_dma_latency
-
-    setprop vendor.powerhal.init 1
-
     # Apply network parameters for high data performance.
     write /proc/sys/net/core/rmem_default 327680
     write /proc/sys/net/core/rmem_max 8388608
@@ -179,24 +187,25 @@ on init
     write /proc/sys/net/core/optmem_max 20480
     write /proc/sys/net/core/netdev_max_backlog 100000
     write /proc/sys/net/ipv4/tcp_rmem "2097152 4194304 8388608"
-    write /proc/sys/net/ipv4/tcp_wmem "524288 1048576 4194304"
-    write /proc/sys/net/ipv4/tcp_mem "88518 118025 177036"
+    write /proc/sys/net/ipv4/tcp_wmem "262144 524288 1048576"
+    write /proc/sys/net/ipv4/tcp_mem "44259 59012 88518"
     write /proc/sys/net/ipv4/udp_mem "88518 118025 177036"
 
     # Clear sched_util_clamp_min_rt_default
     write /proc/sys/kernel/sched_util_clamp_min_rt_default 0
 
-    start watchdogd
-
-    setprop ro.boot.hardware.revision ${ro.revision}
+   start watchdogd
 
 on post-fs
     # set RLIMIT_MEMLOCK to 64MB
     setrlimit 8 67108864 67108864
 
 on post-fs-data
+# Samsung Pay
+    mkdir /efs/pfw_data 0760 vendor_spay vendor_spay
+
 # MST/NFC Switch
-    chown system system /dev/mst_ctrl
+    chown vendor_spay system /dev/mst_ctrl
     chmod 0660 /dev/mst_ctrl
 
 # Log data folder
@@ -255,14 +264,15 @@ on post-fs-data
     chown system system /sys/class/tfa/tfa_vval/status_r
     chown system system /sys/class/tfa/tfa_vval/validation
 
-# Permissions for earjack
-    chown system radio /sys/class/audio/earjack/key_state
-    chown system radio /sys/class/audio/earjack/state
-    chown system radio /sys/class/audio/earjack/mic_adc
+# Gnss data
+    mkdir /data/vendor/gps 0771 system system
+    mkdir /data/vendor/log/gps 0771 system system
 
-# Permissions for FM Radio
-    chown system audio /dev/radio0
-    chmod 0660 /dev/radio0
+    rm /data/vendor/gps/gps_started
+    rm /data/vendor/gps/glonass_started
+    rm /data/vendor/gps/beidou_started
+    rm /data/vendor/gps/smd_started
+    rm /data/vendor/gps/sv_cno.info
 
 # permissions for bluetooth.
     setprop ro.bt.bdaddr_path "/mnt/vendor/efs/bluetooth/bt_addr"
@@ -314,7 +324,6 @@ on post-fs-data
     chown cameraserver system /sys/class/camera/rear/rear_dualcal
     chown cameraserver system /sys/class/camera/rear/rear2_dualcal
     chown cameraserver system /sys/class/camera/rear/rear3_dualcal
-    chown cameraserver system /sys/class/camera/rear/rear3_dualcal_size
     chown cameraserver system /sys/class/camera/rear/front_dualcal
     chown system radio /sys/class/camera/rear/rear_sensor_standby
     chown system radio /sys/class/camera/rear/rear_camtype
@@ -379,6 +388,9 @@ on post-fs-data
 
     mkdir /data/vendor/camera 0777 root root
 
+    chmod 0755 /sys/kernel/debug/tracing
+    restorecon /sys/kernel/debug/tracing/trace_marker
+
 # Gatekeeper data
     mkdir /data/vendor/gk 0771 system system
     mkdir /mnt/vendor/persist/gk 0700 system system
@@ -428,9 +440,15 @@ on boot
     write /sys/module/scsc_mx/parameters/disable_recovery_handling 2
     #settings put global captive_portal_mode 0
 
-# Permissions DBMD8
-    chmod 0660 /dev/dbmdx-1
-    chown system audio /dev/dbmdx-1
+    # Allow to access debugfs for system:system
+    chmod 0755 /sys/kernel/debug
+    chown system system /sys/kernel/debug
+
+    setprop ro.radio.noril no
+
+    # Set up kernel tracing, but disable it by default
+    chmod 0222 /sys/kernel/debug/tracing/trace_marker
+    write /sys/kernel/debug/tracing/tracing_on 0
 
     # Change permission for A-Box firmware logs file & GPR dump
     chown audioserver system /sys/devices/platform/14e50000.abox/0.abox-debug/gicd
@@ -439,6 +457,7 @@ on boot
     chown audioserver system /sys/devices/platform/14e50000.abox/0.abox-debug/calliope_dram
     chown audioserver system /sys/devices/platform/14e50000.abox/0.abox-debug/calliope_log
     chown audioserver system /sys/devices/platform/14e50000.abox/0.abox-debug/calliope_slog
+    chown audioserver system /sys/kernel/debug/regmap/14e50000.abox/registers
     chown audioserver system /proc/abox/log-00
     chown audioserver system /proc/abox/qos
     chown audioserver system /proc/abox/failsafe/online
@@ -464,6 +483,7 @@ on boot
 
 # Meta event
     chown system radio /sys/class/sensors/sensor_dev/flush
+# Grip Sensor
 # [ Permissions for Grip Sensor
     # For GRIP Sensor
     chmod 0660 /dev/grip_sensor
@@ -552,209 +572,7 @@ on boot
     chown system radio /sys/class/sensors/grip_sensor_sub/unknown_state
     chown system radio /sys/class/sensors/grip_sensor_sub/unknown_state_2ch
 	chown system radio /sys/class/sensors/grip_sensor_sub/noti_enable
-
-    chown system radio /sys/class/sensors/grip_sensor_sub2/name
-    chown system radio /sys/class/sensors/grip_sensor_sub2/vendor
-    chown system radio /sys/class/sensors/grip_sensor_sub2/raw_data
-    chown system radio /sys/class/sensors/grip_sensor_sub2/threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub2/calibration
-    chown system radio /sys/class/sensors/grip_sensor_sub2/onoff
-    chown system radio /sys/class/sensors/grip_sensor_sub2/reset
-    chown system radio /sys/class/sensors/grip_sensor_sub2/mode
-    chown system radio /sys/class/sensors/grip_sensor_sub2/gain
-    chown system radio /sys/class/sensors/grip_sensor_sub2/start
-    chown system radio /sys/class/sensors/grip_sensor_sub2/normal_threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub2/gain_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub2/raw_data_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub2/diff_avg_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub2/normal_threshold_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub2/ch_state
-    chown system radio /sys/class/sensors/grip_sensor_sub2/body_threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub2/grip_flush
-    chown system radio /sys/class/sensors/grip_sensor_sub2/irq_count
-    chown system radio /sys/class/sensors/grip_sensor_sub2/ch_count
-    chown system radio /sys/class/sensors/grip_sensor_sub2/resolution
-    chown system radio /sys/class/sensors/grip_sensor_sub2/adc_filt
-    chown system radio /sys/class/sensors/grip_sensor_sub2/useful_filt
-    chown system radio /sys/class/sensors/grip_sensor_sub2/motion
-    chown system radio /sys/class/sensors/grip_sensor_sub2/unknown_state
-    chown system radio /sys/class/sensors/grip_sensor_sub2/unknown_state_2ch
-	chown system radio /sys/class/sensors/grip_sensor_sub2/noti_enable
-
-    chown system radio /sys/class/sensors/grip_sensor_sub3/name
-    chown system radio /sys/class/sensors/grip_sensor_sub3/vendor
-    chown system radio /sys/class/sensors/grip_sensor_sub3/raw_data
-    chown system radio /sys/class/sensors/grip_sensor_sub3/threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub3/calibration
-    chown system radio /sys/class/sensors/grip_sensor_sub3/onoff
-    chown system radio /sys/class/sensors/grip_sensor_sub3/reset
-    chown system radio /sys/class/sensors/grip_sensor_sub3/mode
-    chown system radio /sys/class/sensors/grip_sensor_sub3/gain
-    chown system radio /sys/class/sensors/grip_sensor_sub3/start
-    chown system radio /sys/class/sensors/grip_sensor_sub3/normal_threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub3/gain_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub3/raw_data_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub3/diff_avg_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub3/normal_threshold_ch2
-    chown system radio /sys/class/sensors/grip_sensor_sub3/ch_state
-    chown system radio /sys/class/sensors/grip_sensor_sub3/body_threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub3/grip_flush
-    chown system radio /sys/class/sensors/grip_sensor_sub3/irq_count
-    chown system radio /sys/class/sensors/grip_sensor_sub3/ch_count
-    chown system radio /sys/class/sensors/grip_sensor_sub3/resolution
-    chown system radio /sys/class/sensors/grip_sensor_sub3/adc_filt
-    chown system radio /sys/class/sensors/grip_sensor_sub3/useful_filt
-    chown system radio /sys/class/sensors/grip_sensor_sub3/motion
-    chown system radio /sys/class/sensors/grip_sensor_sub3/unknown_state
-    chown system radio /sys/class/sensors/grip_sensor_sub3/unknown_state_2ch
-	chown system radio /sys/class/sensors/grip_sensor_sub3/noti_enable
-# Abov
-    chown system radio /sys/class/sensors/grip_sensor/grip_irq_count
-    chown system radio /sys/class/sensors/grip_sensor/grip_threshold
-    chown system radio /sys/class/sensors/grip_sensor/grip_total_cap
-    chown system radio /sys/class/sensors/grip_sensor/grip_sar_enable
-    chown system radio /sys/class/sensors/grip_sensor/grip_sw_reset
-    chown system radio /sys/class/sensors/grip_sensor/grip_earjack
-    chown system radio /sys/class/sensors/grip_sensor/grip
-    chown system radio /sys/class/sensors/grip_sensor/grip_baseline
-    chown system radio /sys/class/sensors/grip_sensor/grip_raw
-    chown system radio /sys/class/sensors/grip_sensor/grip_ref_cap
-    chown system radio /sys/class/sensors/grip_sensor/grip_gain
-    chown system radio /sys/class/sensors/grip_sensor/grip_gain_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_check
-    chown system radio /sys/class/sensors/grip_sensor/grip_sar_only_mode
-    chown system radio /sys/class/sensors/grip_sensor/grip_sar_press_threshold
-    chown system radio /sys/class/sensors/grip_sensor/grip_sar_release_threshold
-    chown system radio /sys/class/sensors/grip_sensor/grip_firm_version_phone
-    chown system radio /sys/class/sensors/grip_sensor/grip_firm_version_panel
-    chown system radio /sys/class/sensors/grip_sensor/grip_firm_update
-    chown system radio /sys/class/sensors/grip_sensor/grip_firm_update_status
-    chown system radio /sys/class/sensors/grip_sensor/grip_irq_state
-    chown system radio /sys/class/sensors/grip_sensor/grip_irq_en_cnt
-    chown system radio /sys/class/sensors/grip_sensor/grip_reg_rw
-    chown system radio /sys/class/sensors/grip_sensor/grip_crc_check
-    chown system radio /sys/class/sensors/grip_sensor/grip_sw_reset_ready
-    chown system radio /sys/class/sensors/grip_sensor/grip_register_recover
-
-    chown system radio /sys/class/sensors/grip_sensor/grip_sar_press_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_sar_release_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_irq_count_2ch
-
-    chown system radio /sys/class/sensors/grip_sensor/grip_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_total_cap_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_baseline_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_raw_2ch
-    chown system radio /sys/class/sensors/grip_sensor/grip_check_2ch
-
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_irq_count
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_total_cap
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sar_enable
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sw_reset
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_earjack
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_baseline
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_raw
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_ref_cap
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_gain
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_gain_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_check
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sar_only_mode
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sar_press_threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sar_release_threshold
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_firm_version_phone
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_firm_version_panel
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_firm_update
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_firm_update_status
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_irq_state
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_irq_en_cnt
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_reg_rw
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_crc_check
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sw_reset_ready
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_register_recover
-
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sar_press_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_sar_release_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_irq_count_2ch
-
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_total_cap_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_baseline_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_raw_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/grip_check_2ch
-    chown system radio /sys/class/sensors/grip_sensor_sub/motion
-    chown system radio /sys/class/sensors/grip_sensor_sub/unknown_state
-    chown system radio /sys/class/sensors/grip_sensor_sub/unknown_state_2ch
-	chown system radio /sys/class/sensors/grip_sensor_sub/noti_enable
-# WIFI Grip sensor
-    chown system radio /sys/class/sensors/grip_sensor_wifi/name
-    chown system radio /sys/class/sensors/grip_sensor_wifi/vendor
-    chown system radio /sys/class/sensors/grip_sensor_wifi/raw_data
-    chown system radio /sys/class/sensors/grip_sensor_wifi/threshold
-    chown system radio /sys/class/sensors/grip_sensor_wifi/calibration
-    chown system radio /sys/class/sensors/grip_sensor_wifi/onoff
-    chown system radio /sys/class/sensors/grip_sensor_wifi/reset
-    chown system radio /sys/class/sensors/grip_sensor_wifi/mode
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_ref_cap
-    chown system radio /sys/class/sensors/grip_sensor_wifi/gain
-    chown system radio /sys/class/sensors/grip_sensor_wifi/start
-    chown system radio /sys/class/sensors/grip_sensor_wifi/normal_threshold
-    chown system radio /sys/class/sensors/grip_sensor_wifi/gain_ch2
-    chown system radio /sys/class/sensors/grip_sensor_wifi/raw_data_ch2
-    chown system radio /sys/class/sensors/grip_sensor_wifi/diff_avg_ch2
-    chown system radio /sys/class/sensors/grip_sensor_wifi/normal_threshold_ch2
-    chown system radio /sys/class/sensors/grip_sensor_wifi/ch_state
-    chown system radio /sys/class/sensors/grip_sensor_wifi/body_threshold
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_flush
-    chown system radio /sys/class/sensors/grip_sensor_wifi/irq_count
-    chown system radio /sys/class/sensors/grip_sensor_wifi/ch_count
-    chown system radio /sys/class/sensors/grip_sensor_wifi/resolution
-    chown system radio /sys/class/sensors/grip_sensor_wifi/adc_filt
-    chown system radio /sys/class/sensors/grip_sensor_wifi/useful_filt
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_irq_count
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_threshold
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_total_cap
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sar_enable
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sw_reset
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_earjack
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_baseline
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_raw
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_gain
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_gain_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_check
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sar_only_mode
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sar_press_threshold
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sar_release_threshold
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_firm_version_phone
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_firm_version_panel
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_firm_update
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_firm_update_status
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_irq_state
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_irq_en_cnt
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_reg_rw
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_crc_check
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sw_reset_ready
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_register_recover
-
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sar_press_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_sar_release_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_irq_count_2ch
-
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_threshold_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_total_cap_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_baseline_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_raw_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/grip_check_2ch
-    chown system radio /sys/class/sensors/grip_sensor_wifi/motion
-    chown system radio /sys/class/sensors/grip_sensor_wifi/unknown_state
-    chown system radio /sys/class/sensors/grip_sensor_wifi/unknown_state_2ch
-	chown system radio /sys/class/sensors/grip_sensor_wifi/noti_enable
 # ] Permissions for Grip Sensor
-
 # Fingerprint sensor
     chmod 0660 /dev/goodix_fp
     chown system system /dev/goodix_fp
@@ -786,6 +604,7 @@ on early-fs
     write /sys/devices/platform/fmp/fmp-fips/fmp_fips_run 1
 
 on late-fs
+    wait_for_prop hwservicemanager.ready true
     mount_all /vendor/etc/fstab.${ro.hardware} --late
 
 on fs
@@ -794,6 +613,11 @@ on fs
 
     wait /dev/block/by-name/sec_efs
     mount ext4 /dev/block/by-name/sec_efs /efs nosuid nodev noatime noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic
+
+    wait /dev/block/by-name/spu
+    mount ext4 /dev/block/by-name/spu /spu nosuid nodev noatime noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic
+
+    setprop ro.crypto.fuse_sdcard true
 
     restorecon_recursive /mnt/vendor/efs
     restorecon_recursive /mnt/vendor/cpefs
@@ -807,6 +631,18 @@ on fs
     mkdir /mnt/vendor/persist/data/sfs 0700 system system
     mkdir /mnt/vendor/persist/data/tz 0700 system system
 
+    # Enable rmnet data and aggregation
+    setprop persist.rmnet.mux enabled
+    setprop persist.rmnet.data.enable true
+    setprop persist.data.wda.enable true
+    setprop persist.data.df.agg.dl_pkt 10
+    setprop persist.data.df.agg.dl_size 4096
+
+# modem partition for cbd
+    setprop vendor.cbd.partition modem
+# Permissions for ds_detect
+    chmod 0660 /sys/devices/platform/cpif/sim/ds_detect
+    chown system system /sys/devices/platform/cpif/sim/ds_detect
 # Permissions for ION
     chmod 0660 /sys/class/ion_cma/ion_video_ext/isolated
     chown system system /sys/class/ion_cma/ion_video_ext/isolated
@@ -955,15 +791,123 @@ on fs
 #load ecd firmware
     write /proc/ecd/load_firmware 1
 
+service fuse_sdcard /system/bin/sdcard -u 1023 -g 1023 -d /mnt/media_rw/sdcard /storage/sdcard
+    class late_start
+    disabled
+service fuse_usb1 /system/bin/sdcard -u 1023 -g 1023 -d /mnt/media_rw/usb1 /storage/usb1
+    class late_start
+    disabled
+service fuse_usb2 /system/bin/sdcard -u 1023 -g 1023 -d /mnt/media_rw/usb2 /storage/usb2
+    class late_start
+    disabled
+
+service abox_log /vendor/bin/abox_log sec-audio-debug /data/vendor/log/abox
+    class late_start
+    user audioserver
+    group system
+
 # Set watchdog timer to 30 seconds and fed it every 10 seconds to get a 20 second margin
 service watchdogd /system/bin/watchdogd 10 20
-    user root
     class core
     oneshot
     seclabel u:r:watchdogd:s0
 
+# LPM
+on property:ro.bootmode=charger
+    wait /dev/block/by-name/sec_efs
+    mount ext4 /dev/block/by-name/sec_efs /efs nosuid nodev noatime noauto_da_alloc,discard,journal_checksum,data=ordered,errors=panic
+    chown radio system /efs
+    chmod 0771 /efs
+    chown radio system /efs/usb_hw_param
+    chmod 771 /efs/usb_hw_param
+    chown system system /efs/usb_hw_param/usb_hw_param.log
+    chmod 0660 /efs/usb_hw_param/usb_hw_param.log
+    mkdir /efs/lpm 0775 system system
+    trigger firmware_mounts_complete
+    class_start sec-charger
+
+# epic daemon
+    service epicd /vendor/bin/epic /vendor/etc/epic.json /vendor/etc/epic_sub.json /vendor/etc/epic_tc.json
+    socket epic dgram 666 system system u:object_r:epicd_socket:s0
+    class main
+    user system
+    group system
+    writepid /dev/cpuset/system-background/tasks
+    seclabel u:r:epicd:s0
+
 on property:ro.boot.slot_suffix=*
     setprop vendor.cbd.partition modem${ro.boot.slot_suffix}
+
+service test_copy /vendor/etc/wifi/temp.sh
+    user root
+    oneshot
+
+# on userdebug and eng builds, enable kgdb on the serial console
+on property:ro.debuggable=1
+    write /sys/module/kgdboc/parameters/kgdboc ttyFIQ1
+    write /sys/module/fiq_debugger/parameters/kgdb_enable 1
+
+service dhcpcd_wlan0 /vendor/bin/dhcpcd -aABDKL
+        class main
+        disabled
+        oneshot
+
+service iprenew_wlan0 /vendor/bin/dhcpcd -n
+        class main
+        disabled
+        oneshot
+
+service dhcpcd_p2p /vendor/bin/dhcpcd -aABKL
+        class main
+        disabled
+        oneshot
+
+service iprenew_p2p /vendor/bin/dhcpcd -n
+        class main
+        disabled
+        oneshot
+
+# SPE-1748: PANU DHCP Client not launched
+service dhcpcd_bt-pan /vendor/bin/dhcpcd -ABKL
+        class main
+        disabled
+        oneshot
+
+service iprenew_bt-pan /vendor/bin/dhcpcd -n
+        class main
+        disabled
+        oneshot
+
+# IMS WiFi Calling [START] #
+service charonservice /system/vendor/bin/charon
+        class main
+        user root
+        group system
+        disabled
+        seclabel u:r:charonservice:s0
+
+on property:vendor.charon.exec=1
+    rm /data/vendor/misc/vpn/charon.pid
+    chmod 0666 /dev/tun
+    start charonservice
+
+on property:vendor.charon.exec=0
+    stop charonservice
+    rm /data/vendor/misc/vpn/charon.pid
+# IMS WiFi Calling [END] #
+
+# IMS packet router daemon
+service pktrouter /system/vendor/bin/wfc-pkt-router
+    class main
+    user root
+    disabled
+    seclabel u:r:pktrouter:s0
+
+on property:vendor.pktrouter=1
+    start pktrouter
+
+on property:vendor.pktrouter=0
+    stop pktrouter
 
 on property:ro.factory.factory_binary=factory
     # ASV-G Spec
@@ -1008,5 +952,68 @@ on post-fs
 
 # KERNEL CORE MEMORY
 on boot
-    write /proc/sys/vm/swappiness 145
+    write /proc/sys/vm/swappiness 130
     write /sys/module/zram/parameters/zram_balance_ratio 30
+
+# Pageboostd
+on property:sys.boot_completed=1
+    start pageboostd
+
+service pageboostd /system/bin/pageboostd
+    class main
+    user system
+    group system mount radio net_bt sdcard_rw shell media media_rw
+    socket pageboostd seqpacket 0660 system system
+    disabled
+
+# some priv-apps of DSH bind mount to TMB priv-apps
+on post-fs-data && property:ro.csc.sales_code=TMB
+    umount /system/carrier
+    mkdir /mnt/temp
+    mount none /system/carrier/DSH /mnt/temp bind
+    mount none /system/carrier/TMB /system/carrier bind
+    mount none /mnt/temp/priv-app/CDM /system/carrier/priv-app/CDM bind
+    mount none /mnt/temp/priv-app/MCM /system/carrier/priv-app/MCM bind
+    mount none /mnt/temp/priv-app/MInstaller /system/carrier/priv-app/MInstaller bind
+    mount none /mnt/temp/priv-app/SprintAndroidExtension2DSH /system/carrier/priv-app/SprintAndroidExtension2DSH bind
+    mount none /mnt/temp/priv-app/SMF /system/carrier/priv-app/SMF bind
+    umount /mnt/temp
+    rmdir /mnt/temp
+
+# some priv-apps of DSH bind mount to ASR priv-apps
+on post-fs-data && property:ro.csc.sales_code=ASR
+    umount /system/carrier
+    mkdir /mnt/temp
+    mount none /system/carrier/DSH /mnt/temp bind
+    mount none /system/carrier/ASR /system/carrier bind
+    mount none /mnt/temp/priv-app/CDM /system/carrier/priv-app/CDM bind
+    mount none /mnt/temp/priv-app/MCM /system/carrier/priv-app/MCM bind
+    mount none /mnt/temp/priv-app/MInstaller /system/carrier/priv-app/MInstaller bind
+    mount none /mnt/temp/priv-app/SprintAndroidExtension2DSH /system/carrier/priv-app/SprintAndroidExtension2DSH bind
+    mount none /mnt/temp/priv-app/SMF /system/carrier/priv-app/SMF bind
+    umount /mnt/temp
+    rmdir /mnt/temp
+
+# some priv-apps of DSH bind mount to TMK priv-apps
+on post-fs-data && property:ro.csc.sales_code=TMK
+    umount /system/carrier
+    mkdir /mnt/temp
+    mount none /system/carrier/DSH /mnt/temp bind
+    mount none /system/carrier/TMK /system/carrier bind
+    mount none /mnt/temp/priv-app/CDM /system/carrier/priv-app/CDM bind
+    mount none /mnt/temp/priv-app/MCM /system/carrier/priv-app/MCM bind
+    mount none /mnt/temp/priv-app/MInstaller /system/carrier/priv-app/MInstaller bind
+    mount none /mnt/temp/priv-app/SprintAndroidExtension2DSH /system/carrier/priv-app/SprintAndroidExtension2DSH bind
+    mount none /mnt/temp/priv-app/SMF /system/carrier/priv-app/SMF bind
+    umount /mnt/temp
+    rmdir /mnt/temp
+
+# some priv-apps of DSH bind mount to DSA priv-apps
+on post-fs-data && property:ro.csc.sales_code=DSA
+    umount /system/carrier
+    mkdir /mnt/temp
+    mount none /system/carrier/DSH /mnt/temp bind
+    mount none /system/carrier/DSA /system/carrier bind
+    mount none /mnt/temp/priv-app/VisualVoicemailDsh_Stub /system/carrier/priv-app/VisualVoicemailDsh_Stub bind
+    umount /mnt/temp
+    rmdir /mnt/temp

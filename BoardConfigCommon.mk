@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-COMMON_PATH := device/samsung/gta4xls-common
+COMMON_PATH := device/samsung/a53x-common
 
 ## Inherit proprietary vendor configuartion
-include vendor/samsung/gta4xls-common/BoardConfigVendor.mk
+include vendor/samsung/a53x-common/BoardConfigVendor.mk
 
 ## Architecture
 TARGET_ARCH := arm64

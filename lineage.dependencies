@@ -44,7 +44,7 @@
         "target_path": "hardware/samsung_slsi/scsc_wifibt/wpa_supplicant_lib"
     },
     {
-        "repository": "android_kernel_samsung_gta4xls",
-        "target_path": "kernel/samsung/gta4xls"
+        "repository": "android_kernel_samsung_a53x_xy",
+        "target_path": "kernel/samsung/a53x"
     }
 ]
